@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Habit Garden 🌱</title>
+<style>
+  :root {
+    --bg1:#a8e6cf; --bg2:#dcedc1; --bg3:#ffd3b6;
+    --card:rgba(255,255,255,.55); --ink:#2e4034; --accent:#4caf7d;
+    --accent-dark:#388e6c; --shadow:0 8px 30px rgba(46,64,52,.15);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Segoe UI',system-ui,sans-serif; color:var(--ink);
+    min-height:100vh; padding:24px;
+    background:linear-gradient(135deg,var(--bg1),var(--bg2) 50%,var(--bg3));
+    background-attachment:fixed;
+  }
+  h1 { text-align:center; font-size:2.6rem; letter-spacing:.5px;
+    text-shadow:0 2px 8px rgba(255,255,255,.4); margin-bottom:4px; }
+  .subtitle { text-align:center; opacity:.8; margin-bottom:24px; font-style:italic; }
+  .grid { max-width:1100px; margin:0 auto; display:grid; gap:20px;
+    grid-template-columns:1fr; }
+  @media(min-width:850px){ .grid{ grid-template-columns:1fr 1fr; }
+    .span-2{ grid-column:1 / -1; } }
+  .card {
+    background:var(--card); backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.6); border-radius:22px;
+    padding:22px; box-shadow:var(--shadow);
+  }
+  .card h2 { font-size:1.25rem; margin-bottom:14px; display:flex;
+    align-items:center; gap:8px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  #quote { font-size:1.15rem; line-height:1.5; min-height:60px;
+    display:flex; align-items:center; }
+  .btn { cursor:pointer; border:none; border-radius:14px; padding:10px 16px;
+    font-weight:600; background:var(--accent); color:#fff;
+    transition:transform .15s, background .2s; }
+  .btn:hover { background:var(--accent-dark); transform:translateY(-2px); }
+  .btn.small{ padding:6px 12px; font-size:.85rem; border-radius:10px; }
+  .btn.ghost{ background:rgba(255,255,255,.6); color:var(--ink);
+    border:1px solid rgba(46,64,52,.2); }
+  #garden { display:flex; flex-wrap:wrap; gap:18px; justify-content:center;
+    min-height:160px; align-items:flex-end; }
+  .plant { text-align:center; width:90px; }
+  .pot { animation:sway 4s ease-in-out infinite; }
+  @keyframes sway { 0%,100%{transform:rotate(-2deg)} 50%{transform:rotate(2deg)} }
+  .plant .name { font-size:.8rem; margin-top:4px; font-weight:600; }
+  .stage-label{ font-size:.7rem; opacity:.7; }
+  .empty { opacity:.6; font-style:italic; align-self:center; }
+  .add-row { display:flex; gap:8px; margin-bottom:14px; }
+  .add-row input { flex:1; padding:10px 14px; border-radius:12px;
+    border:1px solid rgba(46,64,52,.2); font-size:1rem; background:rgba(255,255,255,.7); }
+  .habit { display:flex; align-items:center; gap:12px; padding:12px;
+    border-radius:14px; background:rgba(255,255,255,.45); margin-bottom:10px; }
+  .habit .info { flex:1; }
+  .habit .streak { font-size:.8rem; opacity:.8; }
+  .habit .streak small { opacity:.7; }
+  .habit.done { outline:2px solid var(--accent); }
+  .del { cursor:pointer; background:none; border:none; font-size:1.1rem;
+    opacity:.5; transition:opacity .2s; }
+  .del:hover { opacity:1; }
+  .progress { height:7px; border-radius:6px; background:rgba(46,64,52,.15);
+    margin-top:6px; overflow:hidden; }
+  .progress > div { height:100%; background:var(--accent); transition:width .4s; }
+</style>
+</head>
+<body>
+  <h1>🌿 Habit Garden</h1>
+  <p class="subtitle">Where good habits grow into beautiful plants</p>
+
+  <div class="grid">
+    <section class="card span-2">
+      <h2>💡 Daily Motivation</h2>
+      <p id="quote"></p>
+      <div class="row">
+        <button class="btn" onclick="newQuote()">New advice</button>
+        <button class="btn ghost" onclick="previewStages()">Preview all stages 🌱→🌲</button>
+        <button class="btn ghost" onclick="exportData()">Export backup ⬇️</button>
+        <button class="btn ghost" onclick="document.getElementById('importFile').click()">Import ⬆️</button>
+        <input type="file" id="importFile" accept="application/json" hidden onchange="importData(event)" />
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>🪴 Your Garden</h2>
+      <div id="garden"></div>
+    </section>
+
+    <section class="card">
+      <h2>✅ Habit Tracker</h2>
+      <div class="add-row">
+        <input id="habitInput" placeholder="New habit, e.g. Drink water"
+               onkeydown="if(event.key==='Enter')addHabit()" />
+        <button class="btn" onclick="addHabit()">Plant 🌱</button>
+      </div>
+      <div id="habitList"></div>
+    </section>
+  </div>
+
+<script>
+  const KEY = 'habitGarden';
+  let habits = JSON.parse(localStorage.getItem(KEY) || '[]');
+  const save = () => localStorage.setItem(KEY, JSON.stringify(habits));
+  const today = () => new Date().toDateString();
+  const daysBetween = (a,b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+
+  const GRACE_DAYS = 1;
+
+  const quotes = [
+    "Small daily improvements lead to stunning results. 🌱",
+    "A plant grows toward the light. So do you with every habit. ☀️",
+    "Consistency is the water that grows your garden. 💧",
+    "You don't have to be great to start, but you have to start to be great.",
+    "Tiny seeds today become mighty trees tomorrow. 🌳",
+    "Progress, not perfection. Keep tending your garden.",
+    "Every streak began with a single day. Plant one now. 🌼",
+    "Years from now, today's habit will be a towering tree. 🌲"
+  ];
+  function newQuote(){
+    document.getElementById('quote').textContent =
+      quotes[Math.floor(Math.random()*quotes.length)];
+  }
+
+  const MILESTONES = [
+    {days:0,   stage:0, label:'Seed'},
+    {days:1,   stage:1, label:'Sprout'},
+    {days:7,   stage:2, label:'Seedling'},
+    {days:14,  stage:3, label:'Young plant'},
+    {days:30,  stage:4, label:'Bloom 🌸'},
+    {days:60,  stage:5, label:'Bush'},
+    {days:180, stage:6, label:'Sapling 🌿'},
+    {days:365, stage:7, label:'Tree 🌳'},
+    {days:548, stage:8, label:'Flowering tree 🌸🌳'},
+    {days:730, stage:9, label:'Mighty tree 🌲'}
+  ];
+  function milestoneFor(streak){
+    let current = MILESTONES[0];
+    for(const m of MILESTONES){ if(streak >= m.days) current = m; }
+    return current;
+  }
+  function nextMilestone(streak){
+    return MILESTONES.find(m => m.days > streak) || null;
+  }
+
+  function plantSVG(stage){
+    const pot = `<rect x="30" y="78" width="40" height="22" rx="4" fill="#c8794e"/>
+                 <rect x="28" y="74" width="44" height="8" rx="3" fill="#a85d36"/>`;
+    const stem = (h,w=4)=>`<rect x="${50-w/2}" y="${78-h}" width="${w}" height="${h}" fill="#4caf7d"/>`;
+    const leaf = (cx,cy,flip)=>`<ellipse cx="${cx}" cy="${cy}" rx="11" ry="6"
+        fill="#5cc98a" transform="rotate(${flip?-30:30} ${cx} ${cy})"/>`;
+    const canopy = (cy,r,fill)=>`<circle cx="50" cy="${cy}" r="${r}" fill="${fill}"/>`;
+    const blossom = (cx,cy)=>`<circle cx="${cx}" cy="${cy}" r="4" fill="#ff8fb1"/>`;
+    let p = '';
+    switch(stage){
+      case 0: p = `<circle cx="50" cy="74" r="4" fill="#7a5230"/>`; break;
+      case 1: p = stem(14)+leaf(44,66,1)+leaf(56,66,0); break;
+      case 2: p = stem(30)+leaf(40,58,1)+leaf(60,58,0)+leaf(46,48,1); break;
+      case 3: p = stem(46)+leaf(38,52,1)+leaf(62,52,0)+leaf(42,40,1)+leaf(58,40,0)
+                +canopy(30,6,'#7ed99e'); break;
+      case 4: p = stem(50)+leaf(38,52,1)+leaf(62,52,0)
+                +canopy(26,9,'#ff8fb1')+canopy(42,7,'#ffb3c9')+canopy(58,7,'#ffb3c9')
+                +`<circle cx="50" cy="32" r="5" fill="#ffd86b"/>`; break;
+      case 5: p = stem(48)+leaf(36,54,1)+leaf(64,54,0)+leaf(40,42,1)+leaf(60,42,0)
+                +canopy(34,14,'#5cc98a')+canopy(40,10,'#7ed99e'); break;
+      case 6: p = stem(54,6)+canopy(30,18,'#4caf7d')+canopy(38,14,'#5cc98a'); break;
+      case 7: p = stem(40,9)+canopy(26,22,'#388e6c')+canopy(34,18,'#4caf7d'); break;
+      case 8: p = stem(40,9)+canopy(26,22,'#388e6c')+canopy(34,18,'#5cc98a')
+                +blossom(38,22)+blossom(58,26)+blossom(48,16)+blossom(62,38); break;
+      case 9: p = stem(36,12)+canopy(24,26,'#2f6f53')+canopy(34,20,'#388e6c')
+                +canopy(40,16,'#4caf7d'); break;
+    }
+    return `<svg class="pot" width="90" height="100" viewBox="0 0 100 100">${p}${pot}</svg>`;
+  }
+
+  function render(){
+    const garden = document.getElementById('garden');
+    const list = document.getElementById('habitList');
+    garden.innerHTML = ''; list.innerHTML = '';
+
+    if(!habits.length){
+      garden.innerHTML = '<p class="empty">Plant your first habit to grow your garden 🌱</p>';
+    }
+
+    habits.forEach((h,i)=>{
+      const m = milestoneFor(h.streak);
+      const next = nextMilestone(h.streak);
+      const pct = next ? ((h.streak - m.days) / (next.days - m.days)) * 100 : 100;
+
+      garden.insertAdjacentHTML('beforeend',
+        `<div class="plant">${plantSVG(m.stage)}
+           <div class="name">${h.name}</div>
+           <div class="stage-label">${m.label} · 🔥${h.streak}</div>
+         </div>`);
+
+      const done = h.lastDone === today();
+      const nextTxt = next ? `→ ${next.label} at ${next.days}d` : 'Max stage 🏆';
+      list.insertAdjacentHTML('beforeend',
+        `<div class="habit ${done?'done':''}">
+           <button class="btn small" onclick="toggle(${i})">${done?'Done ✓':'Mark today'}</button>
+           <div class="info">
+             <div>${h.name}</div>
+             <div class="streak">🔥 ${h.streak} day(s) · ${m.label} <small>${nextTxt}</small></div>
+             <div class="progress"><div style="width:${pct}%"></div></div>
+           </div>
+           <button class="del" onclick="removeHabit(${i})" title="Remove">🗑️</button>
+         </div>`);
+    });
+  }
+
+  function addHabit(){
+    const input = document.getElementById('habitInput');
+    const name = input.value.trim();
+    if(!name) return;
+    habits.push({ name, streak:0, lastDone:null });
+    input.value=''; save(); render();
+  }
+
+  function toggle(i){
+    const h = habits[i];
+    if(h.lastDone === today()){
+      h.streak = Math.max(0, h.streak-1);
+      h.lastDone = null;
+    } else {
+      if(h.lastDone){
+        const gap = daysBetween(h.lastDone, today());
+        h.streak = (gap <= 1 + GRACE_DAYS) ? h.streak + 1 : 1;
+      } else {
+        h.streak = 1;
+      }
+      h.lastDone = today();
+    }
+    save(); render();
+  }
+
+  function removeHabit(i){
+    if(confirm('Remove "'+habits[i].name+'" from your garden?')){
+      habits.splice(i,1); save(); render();
+    }
+  }
+
+  function previewStages(){
+    habits = MILESTONES.map(m => ({ name:m.label.replace(/[^\w\s]/g,'').trim(),
+      streak:m.days, lastDone:null }));
+    save(); render();
+  }
+
+  function exportData(){
+    const blob = new Blob([JSON.stringify(habits,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'habit-garden-backup.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function importData(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if(Array.isArray(data)){ habits = data; save(); render(); }
+        else alert('That file is not a valid Habit Garden backup.');
+      } catch { alert('Could not read that file.'); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  newQuote();
+  render();
+</script>
+</body>
+</html>
